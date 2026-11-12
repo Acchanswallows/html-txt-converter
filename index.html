@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTML ⇄ TXT ソースコード一括変換ツール</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#19263b;background:#f4f7fb}
+*{box-sizing:border-box}body{margin:0;padding:22px 12px}main{max-width:800px;margin:auto}
+h1{font-size:clamp(23px,5vw,32px);margin:0 0 9px}p{line-height:1.6;color:#59677b}
+.panel{background:#fff;border:1px solid #dbe2ec;border-radius:16px;padding:20px}
+fieldset{border:1px solid #dbe2ec;border-radius:12px;padding:12px;margin:14px 0}
+legend{font-weight:700}.mode{display:flex;gap:10px;padding:9px 2px;line-height:1.5;align-items:flex-start}
+.mode input{margin-top:5px}.mode small{display:block;color:#607087}
+.drop{display:block;border:2px dashed #94a7c3;border-radius:12px;background:#f8fbff;padding:22px 12px;text-align:center}
+.drop strong{display:block;margin-bottom:8px}input[type=file]{max-width:100%;margin-top:12px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+button{border:0;border-radius:9px;padding:12px 15px;background:#145ac7;color:#fff;font-weight:650;font-size:15px;cursor:pointer}
+button.secondary{background:#e9eef6;color:#1d304b}button:disabled{opacity:.45}
+#status{font-size:14px}ul{list-style:none;padding:0}li{padding:8px 0;border-bottom:1px solid #e7ecf3;overflow-wrap:anywhere}
+.result{border:1px solid #dce3ed;border-radius:12px;padding:14px;margin-top:12px}
+.result h3{margin:0 0 10px;font-size:16px;overflow-wrap:anywhere}
+textarea{display:block;width:100%;min-height:130px;resize:vertical;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font:13px/1.5 monospace}
+.result button{margin:10px 8px 0 0}.note{font-size:13px}
+@media(max-width:540px){.panel{padding:13px}.actions{display:grid;grid-template-columns:1fr}.actions button{width:100%}.result button{width:100%;margin:9px 0 0}}
+</style>
+</head>
+<body>
+<main>
+<h1>HTML ⇄ TXT ソースコード一括変換ツール</h1>
+<p>HTMLのソースコードをそのまま保持して、HTMLとTXTを双方向に一括変換できます。ファイルは端末内で処理され、サーバーには送信されません。</p>
+<div class="panel">
+<fieldset><legend>① 変換方向を選択</legend>
+<label class="mode"><input type="radio" name="mode" value="html-source" checked><span><b>HTML → TXT</b><small>HTMLのソースコードを一切削除せず、TXT形式で保存します。</small></span></label>
+<label class="mode"><input type="radio" name="mode" value="txt-source"><span><b>TXT → HTML</b><small>TXTに含まれるHTMLソースコードをそのままHTML形式で保存します。</small></span></label>
+</fieldset>
+<label class="drop"><strong>② ファイルを選択（複数選択可）</strong><span id="acceptHint">.html / .htm ファイル</span><input id="files" type="file" accept=".html,.htm,text/html" multiple></label>
+<div class="actions"><button id="convert" disabled>③ 変換する</button><button id="zip" class="secondary" disabled>まとめてZIPで保存</button><button id="clear" class="secondary">クリア</button></div>
+<p id="status" aria-live="polite">ファイルを選択してください。</p>
+<ul id="filelist"></ul>
+<section id="results" hidden><h2 id="resultTitle"></h2><div id="resultList"></div></section>
+</div>
+<p class="note">注意：TXT内にHTMLソースコードが含まれていない場合、HTMLに変換しても元のページは復元できません。iPhoneでは「ファイル」アプリのプレビューではなく、公開したGitHub PagesのURLをSafariで開いて利用してください。</p>
+</main>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+let files=[],results=[];
+const encoder=new TextEncoder();
+const getMode=()=>document.querySelector('input[name="mode"]:checked').value;
+const isHtml=m=>m.startsWith('html-');
+function resetResults(){results=[];$('results').hidden=true;$('resultList').replaceChildren();$('zip').disabled=true}
+function refresh(){
+ $('filelist').replaceChildren();
+ files.forEach(f=>{let li=document.createElement('li');li.textContent='📄 '+f.name;$('filelist').append(li)});
+ $('convert').disabled=!files.length;
+ $('status').textContent=files.length?files.length+' 件のファイルを選択しました。':'ファイルを選択してください。';
+}
+document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('change',()=>{
+ files=[];$('files').value='';resetResults();
+ const html=isHtml(getMode());
+ $('files').accept=html?'.html,.htm,text/html':'.txt,text/plain';
+ $('acceptHint').textContent=html?'.html / .htm ファイル':'.txt ファイル';
+ refresh();
+}));
+$('files').addEventListener('change',()=>{
+ const html=isHtml(getMode());
+ files=Array.from($('files').files).filter(f=>html?/\.html?$/i.test(f.name):/\.txt$/i.test(f.name));
+ resetResults();refresh();
+});
+$('clear').addEventListener('click',()=>{files=[];$('files').value='';resetResults();refresh()});
+function outputName(n,mode){
+ const stem=n.replace(/\.(html?|txt)$/i,'').replace(/[\\/:*?"<>|]/g,'_');
+ return stem+(mode.startsWith('html-')?'.txt':'.html');
+}
+function downloadBlob(blob,name){
+ const u=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=u;a.download=name;document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(u),30000);
+}
+function downloadEntry(e){downloadBlob(new Blob([e.bytes],{type:e.name.endsWith('.html')?'text/html;charset=utf-8':'text/plain;charset=utf-8'}),e.name)}
+$('convert').addEventListener('click',async()=>{
+ $('convert').disabled=true;resetResults();$('status').textContent='変換中です…';
+ const mode=getMode();
+ try{
+  for(const f of files){
+   const bytes=new Uint8Array(await f.arrayBuffer());
+   const source=new TextDecoder('utf-8').decode(bytes);
+   const content=source;
+   const outputBytes=bytes;
+   results.push({name:outputName(f.name,mode),bytes:outputBytes,preview:content});
+  }
+  for(const e of results){
+   const card=document.createElement('div');card.className='result';
+   const heading=document.createElement('h3');heading.textContent=e.name;
+   const ta=document.createElement('textarea');ta.readOnly=true;ta.value=e.preview;
+   const save=document.createElement('button');save.textContent='このファイルを保存';save.onclick=()=>downloadEntry(e);
+   const copy=document.createElement('button');copy.className='secondary';copy.textContent='内容をコピー';
+   copy.onclick=async()=>{try{await navigator.clipboard.writeText(e.preview);$('status').textContent='コピーしました。'}catch{ta.focus();ta.select();$('status').textContent='内容を選択しました。長押しでコピーしてください。'}};
+   card.append(heading,ta,save,copy);$('resultList').append(card);
+  }
+  $('resultTitle').textContent=results.length+' 件の変換が完了しました';
+  $('results').hidden=false;$('zip').disabled=!results.length;
+  $('status').textContent='変換が完了しました。個別保存またはZIP一括保存を選べます。';
+ }catch(e){$('status').textContent='変換できませんでした: '+e.message}
+ $('convert').disabled=!files.length;
+});
+// ZIP writer (store method, UTF-8 names, no external libraries)
+const crcTable=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(a){let c=0xffffffff;for(const b of a)c=crcTable[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0}
+function w16(a,v){a.push(v&255,(v>>>8)&255)}function w32(a,v){a.push(v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255)}
+function zipFiles(entries){
+ const local=[],central=[];let offset=0;
+ const used=new Set();
+ for(const e of entries){
+  let name=e.name;let n=2;
+  while(used.has(name)){const dot=e.name.lastIndexOf('.');name=e.name.slice(0,dot)+' ('+n+++')'+e.name.slice(dot)}
+  used.add(name);
+  const nb=encoder.encode(name),data=e.bytes,crc=crc32(data),l=[];
+  w32(l,0x04034b50);w16(l,20);w16(l,0x0800);w16(l,0);w16(l,0);w16(l,0);w32(l,crc);w32(l,data.length);w32(l,data.length);w16(l,nb.length);w16(l,0);
+  local.push(new Uint8Array(l),nb,data);
+  const c=[];
+  w32(c,0x02014b50);w16(c,20);w16(c,20);w16(c,0x0800);w16(c,0);w16(c,0);w16(c,0);w32(c,crc);w32(c,data.length);w32(c,data.length);w16(c,nb.length);w16(c,0);w16(c,0);w16(c,0);w16(c,0);w32(c,0);w32(c,offset);
+  central.push(new Uint8Array(c),nb);offset+=l.length+nb.length+data.length;
+ }
+ const centralSize=central.reduce((s,x)=>s+x.length,0),end=[];
+ w32(end,0x06054b50);w16(end,0);w16(end,0);w16(end,entries.length);w16(end,entries.length);w32(end,centralSize);w32(end,offset);w16(end,0);
+ return new Blob([...local,...central,new Uint8Array(end)],{type:'application/zip'});
+}
+$('zip').addEventListener('click',()=>{
+ if(!results.length)return;
+ if(results.length>65535){$('status').textContent='ZIPは65535件以下のファイルに対応しています。';return}
+ downloadBlob(zipFiles(results),'converted_files.zip');
+ $('status').textContent='ZIPの保存を開始しました。';
+});
+refresh();
+})();
+</script>
+</body>
+</html>
